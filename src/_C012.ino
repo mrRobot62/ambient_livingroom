@@ -149,7 +149,8 @@ boolean CPlugin_012(byte function, struct EventStruct *event, String &string) {
       }
       //
       // call this plugin
-      PluginCall(PLUGIN_WRITE, &TempEvent, plugin);
+      //      PluginCall(PLUGIN_WRITE, &TempEvent, plugin);
+      PluginCall(PLUGIN_WRITE, &TempEvent, group);
     } else {
       String msg = "no valid plugin set via MQTT (FHEM)";
       addLog(LOG_LEVEL_INFO, msg);

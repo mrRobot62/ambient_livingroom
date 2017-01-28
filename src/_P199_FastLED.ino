@@ -198,7 +198,8 @@ boolean Plugin_199(byte function, struct EventStruct *event, String &string) {
   case PLUGIN_WRITE: {
     String log = "PLUGIN_WRITE: ";
     String cmd = parseString(string, 1);
-
+    addLog(LOG_LEVEL_INFO, ">> PLUGIN_WRITE..." + cmd);
+    cmd.toLowerCase();
     if (cmd == "hsv") {
       success = true;
       // event->String2 stores payload
@@ -237,8 +238,19 @@ boolean Plugin_199(byte function, struct EventStruct *event, String &string) {
       }
     } else if (cmd == "dimmer") {
       success = true;
-      addLog(LOG_LEVEL_INFO, "not implemented yet");
+      // addLog(LOG_LEVEL_INFO, "not implemented yet");
+      int p1 = event->Par1;
+      if (p1 >= 0 && p1 <= 100) {
+        addLog(LOG_LEVEL_INFO, "set brightness(" + String(p1) + ")");
+        ambientLight->setBrightness(p1);
+        ambientLight->update();
+      }
     }
+    break;
+  }
+
+  case PLUGIN_TEN_PER_SECOND: {
+    ambientLight->update();
     break;
   }
   }
