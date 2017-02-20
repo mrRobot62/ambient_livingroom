@@ -423,12 +423,25 @@ void AmbientLight_init() {
 
 DEFINE_GRADIENT_PALETTE(orange_gp){
     0,   0,    0,    0,    //
+    16,  0xFF, 0xA5, 0x00, //
     128, 0xFF, 0xA5, 0x00, //
+    240, 0xFF, 0xA5, 0x00, //
     255, 0,    0,    0     //
 };
 
 DEFINE_GRADIENT_PALETTE(indigo_gp){
     0,   0,    0,    0,    //
+    16,  0x4B, 0x00, 0x82, //
     128, 0x4B, 0x00, 0x82, //
+    240, 0x4B, 0x00, 0x82, //
     255, 0,    0,    0     //
 };
+
+// Gradient palette "Yellow_Orange_gp", originally from
+// http://soliton.vm.bytemark.co.uk/pub/cpt-city/nd/basic/tn/Yellow_Orange.png.index.html
+// converted for FastLED with gammas (2.6, 2.2, 2.5)
+// Size: 20 bytes of program space.
+
+DEFINE_GRADIENT_PALETTE(Yellow_Orange_gp){
+    0,  255, 199, 0,   34, 255, 121, 0,   128, 255, 63,  0,   188, 222,
+    51, 1,   200, 194, 39, 1,   232, 255, 63,  0,   255, 255, 199, 0};
