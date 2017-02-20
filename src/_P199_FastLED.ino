@@ -5,7 +5,7 @@
 
 // Command: FastLED <led nr>,<red>,<green>,<blue>
 
-#include "AmbientLight.h"
+//#include "AmbientLight.h"
 
 #define PLUGIN_199
 #define PLUGIN_ID_199 199
@@ -13,12 +13,13 @@
 #define PLUGIN_VALUENAME1_199 "_P199_FastLED"
 
 boolean initialized = false;
-AmbientLight *ambientLight;
+boolean test = false;
+// AmbientLight *ambientLight;
 
 boolean Plugin_199(byte function, struct EventStruct *event, String &string) {
   boolean success = false;
   String paramString = string;
-  ambientLight = ambientLight->getInstance();
+  // ambientLight = ambientLight->getInstance();
   switch (function) {
 
   /* create a new device */
@@ -157,10 +158,13 @@ boolean Plugin_199(byte function, struct EventStruct *event, String &string) {
 
   /* initialize this plugin */
   case PLUGIN_INIT: {
-    if (!initialized) {
-      initialized = true;
-    }
+    // Witty_init();
     success = true;
+    IPAddress ip = WiFi.localIP();
+    String log = F("LocalIP: ");
+    log += ip.toString();
+    addLog(LOG_LEVEL_INFO, log);
+    AmbientLight_init();
     break;
   }
 
@@ -194,63 +198,152 @@ boolean Plugin_199(byte function, struct EventStruct *event, String &string) {
     break;
   }
 
-  /* write information back zu server */
+  /*
+
+    write information back zu server
+
+    possible commands
+    hsv     => user set HSV color. Data is stored in user pattern
+            .../AmbientLight1/hsv/<id>
+    rgb     => user set RGB color. Data is stored in user pattern
+            .../AmbientLight1/rgb/<id>
+    pattern => user set pattern ID. (see PatternFuncTyp list)
+            .../AmbientLight1/pattern/<id>
+    test    => create a test pattern
+    witty   => use a witty board
+    switch  => ON/OFF led stripe
+    dimmer  => set generell brightness for current pattern
+    }
+  */
   case PLUGIN_WRITE: {
     String log = "PLUGIN_WRITE: ";
     String cmd = parseString(string, 1);
-    addLog(LOG_LEVEL_INFO, ">> PLUGIN_WRITE..." + cmd);
-    cmd.toLowerCase();
-    if (cmd == "hsv") {
-      success = true;
-      // event->String2 stores payload
-      // payload format for HSV is hue:sat:Bright
-      int values[3];
-      byte count = 0;
-      String payload = event->String2;
-      int idx = payload.indexOf(':');
-      while (idx > 0 && count < 2) {
-        values[count] = payload.substring(0, idx).toInt();
-        payload = payload.substring(idx + 1);
-        idx = payload.indexOf(':');
-        count++;
-      }
-      // last part of payload
-      values[count] = payload.toInt();
-      log = "HSV - ";
-      log += "H(" + String(values[0]) + ") ";
-      log += "S(" + String(values[1]) + ") ";
-      log += "V(" + String(values[2]) + ") ";
-      addLog(LOG_LEVEL_INFO, log);
-      ambientLight->setHSV(values[0], values[1], values[2]);
+    // String cmd2 = parseString(string, 2);
+    log += "CMD (" + cmd + ") ";
+    // log += "CMD2 (" + cmd2 + ") " ;
+    log += "String 1 (" + event->String1 + ") ";
+    log += "String 2 (" + event->String2 + ") ";
+    log += "Par1 (" + String(event->Par1) + ") "; // id
+    log += "Par2 (" + String(event->Par2) + ") "; // on/off (e.g. for switch)
+    log += "Par3 (" + String(event->Par3) + ") "; // -1
 
+    addLog(LOG_LEVEL_INFO, log);
+    cmd.toLowerCase();
+    initialized = false;
+    if (cmd == "hsv") {
+      log = "(hsv)";
+      log += "with ID: ";
+      log += String(event->Par1);
+      log += " payload(";
+      log += event->String2;
+      log += ")";
+      addLog(LOG_LEVEL_INFO, log);
+      //
+      setHSVColor(event->Par1, event->String2);
+      //
+      initialized = true;
+      success = true;
+    } else if (cmd == "rgb") {
+      log = "(rgb)";
+      addLog(LOG_LEVEL_INFO, log);
+      //
+      setRGBColor(event->Par1, event->String2);
+      //
+      initialized = true;
+      success = true;
+    } else if (cmd == "pattern") {
+      log = "(pattern)";
+      addLog(LOG_LEVEL_INFO, log);
+      //
+
+      //
+      initialized = true;
+      success = true;
+    } else if (cmd == "test") {
+      log = "(test)";
+      addLog(LOG_LEVEL_INFO, log);
+      initialized = true;
+      success = true;
+      TEST_Simple(event->Par1);
+    } else if (cmd == "witty") {
+      success = true;
+      addLog(LOG_LEVEL_INFO, "Witty command");
+
+      String rgb[3];
+      rgb[0] = parseString(event->String2, 1);
+      rgb[1] = parseString(event->String2, 2);
+      rgb[2] = parseString(event->String2, 3);
+      rgb[0].toLowerCase();
+      rgb[1].toLowerCase();
+      rgb[2].toLowerCase();
+      Witty_setRed(0, false);
+      Witty_setGreen(0, false);
+      Witty_setBlue(0, false);
+
+      log = "(" + rgb[0] + "/";
+      log += rgb[1] + "/";
+      log += rgb[2] + ")";
+      addLog(LOG_LEVEL_INFO, log);
+
+      if (rgb[0] == "on")
+        Witty_setRed(500);
+      if (rgb[1] == "on")
+        Witty_setGreen(500);
+      if (rgb[2] == "on")
+        Witty_setBlue(500);
     } else if (cmd == "pattern") {
       success = true;
       addLog(LOG_LEVEL_INFO, "not implemented yet");
 
     } else if (cmd == "switch") {
+      initialized = true;
       success = true;
-      addLog(LOG_LEVEL_INFO, "not implemented yet");
+      //      addLog(LOG_LEVEL_INFO, "not implemented yet");
       if (event->Par1 >= 0 && event->Par1 <= 16) {
-        // valid gpio portnumber
+        log = "SW GPIO(";
+        log += String(event->Par1) + ") ";
+        log += (event->Par2) ? "ON" : "OFF";
+        addLog(LOG_LEVEL_INFO, log);
+        pinMode(event->Par1, OUTPUT);
+        digitalWrite(event->Par1, constrain(event->Par2, 0, 1));
       } else {
         log += "wrong gpio port (" + String(event->Par1) + ")";
         addLog(LOG_LEVEL_INFO, log);
       }
     } else if (cmd == "dimmer") {
+      initialized = true;
       success = true;
       // addLog(LOG_LEVEL_INFO, "not implemented yet");
       int p1 = event->Par1;
       if (p1 >= 0 && p1 <= 100) {
         addLog(LOG_LEVEL_INFO, "set brightness(" + String(p1) + ")");
-        ambientLight->setBrightness(p1);
-        ambientLight->update();
+        // ambientLight->setBrightness(p1);
+        // ambientLight->update();
       }
+    }
+    break;
+  }
+  case PLUGIN_ONCE_A_SECOND: {
+    String log = "";
+    if (initialized) {
+      // ambientLight->update();
+      log = "Current Pattern ";
+      log += getCurrentPattern();
+      log += " Brightness: ";
+      log += getBrightness();
+      addLog(LOG_LEVEL_INFO, log);
+      gHue++;
+    } else {
+      AmbientLightOff();
     }
     break;
   }
 
   case PLUGIN_TEN_PER_SECOND: {
-    ambientLight->update();
+    if (initialized) {
+      update();
+      // TEST_Simple1();
+    }
     break;
   }
   }

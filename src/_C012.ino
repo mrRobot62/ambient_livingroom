@@ -33,32 +33,36 @@ boolean CPlugin_012(byte function, struct EventStruct *event, String &string) {
 
   case CPLUGIN_PROTOCOL_TEMPLATE: {
     strcpy_P(Settings.MQTTsubscribe, PSTR("/FHEM/#"));
-    strcpy_P(Settings.MQTTpublish, PSTR("/%sysname%/%tskname%/%valname%"));
+    strcpy_P(Settings.MQTTpublish, PSTR("/FHEM/%sysname%/%tskname%/%valname%"));
     break;
   }
 
   case CPLUGIN_PROTOCOL_RECV: {
-    // FHEM topic structure: /FHEM/Floor/Room/device/<plugin>/group/<number>
-
+    String msg = "";
+    // FHEM topic structure: /FHEM/Floor/Room/%sysname%/%tskname%/group/<number>
+    //
+    // %sysname = devicename = FastLED
+    //
     //  Topic 0 = FHEM, 1=Floor (e.g. 1st), 2=Room (e.g kitchen)
-    //  3=device (e.g. AmbientLight), 4=plugin (e.g. _P199_FastLED)
+    //  3=system (FastLED), 4=device (e.g. LR_Ceeling_1)
     //  5=group (e.g hsv, pattern, switch)
     //  6=number (e.g. 16(pin))
     //
-    //  Example for _P199_FastLED: /FHEM/Floor/Room/device/_P199_FastLED
-    //    .../_P199_FastLED/hsv     => payload three values
-    //                                  (hue, staturation,brightness)
-    //    .../_P199_FastLED/pattern/id => payload two values
-    //                                  (param1,param2)
-    //    .../_P199_FastLED/switch => payload two values (ON/OFF)
-    //    .../_P199_FastLED/dimmer => payload one value (0..100)
+    //  Example for a AmbientLight system with device: (=> here LR_Ceeling_1)
+    //  /FHEM/Floor/Room/FastLED/LR_Ceeling_1/hsv
     //
-    //  Example : SWITCH (_P001_Switch)
-    //  ... /device/_P001_Switch/gpio/<port>  => payload ON/OFF
+    //    .../FastLED/LR_Ceeling_1/hsv     => payload three values
+    //                                            (hue, staturation,brightness)
+    //    .../FastLED/LR_Ceeling_1/pattern/id => payload two values
+    //                                                (param1,param2)
+    //    .../FastLED/LR_Ceeling_1/switch => payload two values (ON/OFF)
+    //    .../FastLED/LR_Ceeling_1/dimmer => payload one value (0..100)
+    //
+    //
     // Split topic into array
     // start up from FHEM
     String tmpTopic = event->String1.substring(1);
-    addLog(LOG_LEVEL_INFO, tmpTopic);
+    addLog(LOG_LEVEL_DEBUG, tmpTopic);
 
     //
     // 1st - split topic string into a list
@@ -73,88 +77,112 @@ boolean CPlugin_012(byte function, struct EventStruct *event, String &string) {
     }
     topicSplit[count] = tmpTopic;
 
-    // 2nd - Check if 5th entry is a plugin name
-    //       Check 6th entry it's a group or command entry
-    // a ESPEasy plugin starts everytime with an "_" => _P199_FastLED
-    String plugin = topicSplit[4];
-    String group = topicSplit[5];
+    // 2nd - Check if 4th entry is a plugin name or systemname
+    //       Check 5th entry it's a group or command entry
+    //
+    String sys = topicSplit[3];   // e.g. AmbientLight
+    String task = topicSplit[4];  // e.g. LR_Ceeling_1
+    String group = topicSplit[5]; // e.g. hsv
     struct EventStruct TempEvent;
 
+    // msg = "message for :";
+    // msg += Settings.Name;
+    // msg += " device :";
+    // msg += ExtraTaskSettings.TaskDeviceName;
+    //
+    // addLog(LOG_LEVEL_INFO, msg);
+
+    // is it a message for AmbientLight ?
+    if (sys != Settings.Name) {
+      break;
+    }
+
+    msg = "FHEM-Broker read message for :";
+    msg += sys;
+    msg += " task :";
+    msg += task;
+
+    addLog(LOG_LEVEL_INFO, msg);
     //
     // 3rd last (4) topic is the ESPEasy-Plugin name
     // 2nd last is the group/command (5) for given EASPEasy-Plugin
     // last is(can) be a value like portnumber, ...
-    // payload is everytime the value for this group
+    // payload is everytime the value(s) for this group and
+    //  is handled from plugin
 
-    // start 5th entry with "_" - if yes, it is a plugin
-    if (plugin.substring(0, 1) == "_") {
-      String msg = "";
-      char tmp[20];
-      TempEvent.Source = VALUE_SOURCE_MQTT;
-      /*
-      sprintf_P(log,
-        PSTR("call plugin %s, Group %s, ID %s, Payload %s"),
-        plugin.toCharArray(tmp, 20);
+    // if task != current task name break
+    if (task != ExtraTaskSettings.TaskDeviceName) {
+      msg = "ignore message for this task (";
+      msg = ExtraTaskSettings.TaskDeviceName;
+      msg = ")";
+      addLog(LOG_LEVEL_INFO, msg);
+      break;
+    }
+    msg = "FHEM-Broker excepted for ";
+    msg += Settings.Name;
+    msg += " task :";
+    msg += ExtraTaskSettings.TaskDeviceName;
+    addLog(LOG_LEVEL_INFO, msg);
 
-      )
-      */
-      msg = "call plugin (";
-      msg += plugin;
+    char tmp[20];
+    TempEvent.Source = VALUE_SOURCE_MQTT;
+    // addLog(LOG_LEVEL_DEBUG, "got message from broker");
 
-      msg += ") Group (";
-      msg += group;
+    msg = "call task (";
+    msg += task;
 
-      if (count > 5) {
-        msg += ") ID (";
-        msg += topicSplit[count];
-      }
+    msg += ") Group (";
+    msg += group;
 
-      msg += ") Payload (";
-      msg += event->String2;
-      msg += ")";
+    if (count > 5) {
+      msg += ") ID (";
+      msg += topicSplit[count];
+    }
 
+    msg += ") Payload (";
+    msg += event->String2;
+    msg += ")";
+
+    addLog(LOG_LEVEL_INFO, msg);
+
+    // transmitted payload is allways read as string and converted to
+    // plugin relevant values inside the plugin, except simple values like
+    // ON/OFF it's done below
+    // => String2 allways store payload
+    // => String1 allways store group
+    String payload = event->String2;
+    TempEvent.String2 = payload;
+    TempEvent.String1 = group;
+    // if not set par1+2 to -1 (not used)
+    TempEvent.Par1 = TempEvent.Par2 = TempEvent.Par3 = -1;
+    //
+    // if an ID is given convert it into number and store value into event
+    // allways as event.Par1
+    if (count > 5) {
+
+      msg = " value: ";
+      msg += topicSplit[6];
       addLog(LOG_LEVEL_INFO, msg);
 
-      // transmitted payload is allways read as string and converted to
-      // plugin relevant values inside the plugin, except simple values like
-      // ON/OFF it's done below
-      // => String2 allways store payload
-      // => String1 allways store group
-      String payload = event->String2;
-      TempEvent.String2 = payload;
-      TempEvent.String1 = group;
-      // if not set par1+2 to -1 (not used)
-      TempEvent.Par1 = TempEvent.Par2 = TempEvent.Par3 = -1;
-      //
-      // if an ID is given convert it into number and store value into event
-      // allways as event.Par1
-      if (count > 5) {
+      TempEvent.Par1 = topicSplit[6].toInt();
+    }
 
-        msg = " value: ";
-        msg += topicSplit[6];
-        addLog(LOG_LEVEL_INFO, msg);
-
-        TempEvent.Par1 = topicSplit[6].toInt();
-      }
-
-      //
-      // check payload of boolean values
-      // if set, use event.Par2 to store setting
-      event->String2.toLowerCase();
-      if (event->String2 == "true" || event->String2 == "on" ||
-          event->String2 == "an") {
-        TempEvent.Par2 = 1;
-      } else {
+    //
+    // check payload of boolean values
+    // if set, use event.Par2 to store setting
+    event->String2.toLowerCase();
+    if (event->String2 == "true" || event->String2 == "on" ||
+        event->String2 == "an") {
+      TempEvent.Par2 = 1;
+    } else {
+      if (event->String2.length() > 0) {
         TempEvent.Par2 = 0;
       }
-      //
-      // call this plugin
-      //      PluginCall(PLUGIN_WRITE, &TempEvent, plugin);
-      PluginCall(PLUGIN_WRITE, &TempEvent, group);
-    } else {
-      String msg = "no valid plugin set via MQTT (FHEM)";
-      addLog(LOG_LEVEL_INFO, msg);
     }
+    //
+    // call plugin
+    //      PluginCall(PLUGIN_WRITE, &TempEvent, group);
+    PluginCall(PLUGIN_WRITE, &TempEvent, group);
     break;
   }
 
